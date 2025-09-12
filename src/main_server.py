@@ -6,3 +6,5 @@ from connection_manager import ConnectionManager
 
 app = FastAPI()
     
+manager = ConnectionManager()
+

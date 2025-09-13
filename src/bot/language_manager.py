@@ -13,3 +13,16 @@ cred = credentials.Certificate(SERVICE_ACCOUNT_KEY_PATH)
 firebase_admin.initialize_app(cred)
 # Get a Firestore client
 db = firestore.client()
+
+# Update user language preference in Firestore (global setting)
+def update_user_language(user_id: int, language_code: str):
+    """
+    Updates or sets the preferred language for a user in Firestore.
+    This setting is global for the user across all chats.
+    """
+    try:
+        user_ref = db.collection('users').document(str(user_id))
+        user_ref.set({'language': language_code}, merge=True)
+        print(f"Language for user {user_id} updated to '{language_code}' in Firestore.")
+    except Exception as e:
+        print(f"Error updating user language in Firestore: {e}")

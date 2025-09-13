@@ -26,3 +26,23 @@ def update_user_language(user_id: int, language_code: str):
         print(f"Language for user {user_id} updated to '{language_code}' in Firestore.")
     except Exception as e:
         print(f"Error updating user language in Firestore: {e}")
+        return None
+# Fetch user language preference from Firestore (global setting)
+def fetch_user_language(user_id: int) -> str:
+    """
+    Fetches the preferred language for a user from Firestore.
+    Returns None if no preference is set.
+    """
+    try:
+        # Get a reference to the user document
+        user_ref = db.collection('users').document(str(user_id))
+        # Fetch the document
+        doc = user_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            return data.get('language')
+        else:
+            return None
+    except Exception as e:
+        print(f"Error fetching user language from Firestore: {e}")
+        return None

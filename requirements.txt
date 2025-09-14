@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-telegram-bot
+google-generativeai
+requests
+httpx
+langdetect
+firebase-admin
+transformers
+sentencepiece
+torch

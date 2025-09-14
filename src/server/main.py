@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
@@ -6,15 +7,20 @@ from contextlib import asynccontextmanager
 from ..services.translation import translate_text_nllb, load_model
 
 # This is the lifespan manager that FastAPI will use.
-# It runs the code inside it when the server starts up.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Code to run on startup:
+    # On startup, load the model and store it in the app's state
     print("Server is starting up...")
-    load_model()  # <--- This is the crucial call to load the model
+    model, tokenizer, device = load_model()
+    app.state.model = model
+    app.state.tokenizer = tokenizer
+    app.state.device = device
     yield
-    # Code to run on shutdown:
+    # On shutdown, clear the state
     print("Server is shutting down.")
+    app.state.model = None
+    app.state.tokenizer = None
+    app.state.device = None
 
 # Define the data model for the translation request body
 class TranslationRequest(BaseModel):
@@ -30,15 +36,30 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect base path to interactive API docs."""
+    return RedirectResponse(url="/docs")
+
 @app.post("/translate", summary="Translate Text")
 async def translate(request: TranslationRequest):
     """
     Receives text and language codes, and returns the translated text
-    using the loaded NLLB model.
+    using the model stored in the application state.
     """
-    translated_text = translate_text_nllb(
-        text=request.text,
-        source_lang=request.source_lang,
-        target_lang=request.target_lang
-    )
-    return {"translation": translated_text}
+    try:
+        translated_text = translate_text_nllb(
+            text=request.text,
+            source_lang=request.source_lang,
+            target_lang=request.target_lang,
+            model=app.state.model,
+            tokenizer=app.state.tokenizer,
+            device=app.state.device
+        )
+        return {"translated_text": translated_text}
+    except ValueError as e:
+        # This will catch the error for unsupported languages
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # Generic error for other issues
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")

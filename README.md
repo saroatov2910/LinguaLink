@@ -1,65 +1,94 @@
 # LinguaLink
 
-LinguaLink is a Telegram bot that provides real-time, multi-language translation in group chats. It allows users in a group to communicate seamlessly, each in their own native language.
+LinguaLink is a Telegram bot + FastAPI server that provides real-time multi-language translation in Telegram groups. Each participant can write in their own language and others receive an in-group translated message.
+
+## What’s inside
+
+- FastAPI translation server backed by a local NLLB model (facebook/nllb-200-distilled-600M)
+- Telegram bot (python-telegram-bot) for group handling and mentions
+- Firestore storage for user language preferences and tracked group members
 
 ## Features
 
-- **Real-time Translation**: Messages are translated instantly.
-- **Multi-Language Support**: Each user can set their own preferred language.
-- **Group Chat Integration**: Works within Telegram group chats.
-- **Private Translations**: Translations are sent as private messages to keep the main chat clean.
-- **Persistent Settings**: User language preferences are saved and reloaded on restart.
+- Real-time translation in groups (in-group messages, not private DMs)
+- Per-user target language with `/setlang`
+- Optional auto-detect for sender language when not set
+- Diagnostics with `/status` (server health, your language, tracked members)
 
-## How It Works
+## Requirements
 
-The project consists of two main components:
-1.  **Telegram Bot (`telegram_bot.py`)**: This is the main application that interacts with users on Telegram. It handles commands, manages user language settings, and sends/receives messages.
-2.  **Translation Server (`translation_server.py`)**: A FastAPI server that exposes a `/translate` endpoint. It receives translation requests from the bot, uses the Google Gemini API to perform the translation, and returns the result.
+- Python 3.9+
+- A Telegram Bot token in `src/config.py` (TELEGRAM_BOT_TOKEN)
+- Firebase service account JSON at `data/lingualink-d4685-firebase-adminsdk-*.json`
 
-This architecture decouples the bot from the translation service, making the system more modular and scalable.
+Install dependencies:
 
-## Installation
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/saroatov2910/LinguaLink.git
-    cd LinguaLink
-    ```
+Supported language codes (short → NLLB): en, he, es, ru, ar, fr, de
 
-2.  **Create and activate a virtual environment:**
-    ```bash
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
+Upload supported languages to Firestore (one-time):
 
-3.  **Install the dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+python scripts/upload_settings.py
+```
 
-4.  **Configure your API keys:**
-    - Open the `src/config.py` file.
-    - Set your `TELEGRAM_BOT_TOKEN` and `GEMINI_API_KEY`.
+## Run
 
-## Usage
+1) Start the translation server (FastAPI):
 
-1.  **Start the translation server:**
-    ```bash
-    uvicorn src.translation_server:app --reload
-    ```
+```bash
+python run_main_server.py
+# Open http://127.0.0.1:8000/docs to test the /translate endpoint
+```
 
-2.  **Start the Telegram bot (in a separate terminal):**
-    ```bash
-    python3 src/telegram_bot.py
-    ```
+2) Start the Telegram bot (new terminal):
 
-3.  **Interact with the bot on Telegram:**
-    - Add the bot to a group chat.
-    - Each user should send `/start` to the bot in a private message to allow the bot to message them.
-    - Each user should set their language using the `/setlang` command in the group chat (e.g., `/setlang he`).
-    - Start chatting! The bot will automatically translate messages and send them privately.
+```bash
+python -m src.bot.main
+```
 
-## Bot Commands
+3) Telegram setup (once):
 
-- `/start`: Displays a welcome message.
-- `/setlang <language_code>`: Sets your preferred language (e.g., `/setlang en` for English, `/setlang es` for Spanish).
+- In BotFather: /setprivacy → Disable (so the bot can read group messages)
+- Add the bot to your group and allow it to send/read messages (admin recommended)
+
+4) Use in the group:
+
+- Each participant runs once: `/setlang en` (or he, es, ru, ar, fr, de)
+- Then just chat normally. The bot sends a translated message per target language and mentions recipients.
+- `/status` shows server health and your saved language.
+
+## API quick test
+
+POST http://127.0.0.1:8000/translate
+
+Body (JSON):
+
+```json
+{ "text": "שלום", "source_lang": "he", "target_lang": "en" }
+```
+
+Response:
+
+```json
+{ "translated_text": "Hello" }
+```
+
+## Troubleshooting
+
+- 404 on / → Root redirects to /docs now; use http://127.0.0.1:8000/docs
+- `/status` → “Server: DOWN”: start the server (run_main_server.py)
+- No translations: ensure each recipient set `/setlang`; sender can rely on auto-detect but recipients must have a target language
+- 400 from /translate: unsupported language code — use one of en, he, es, ru, ar, fr, de
+- Slow first translation: model warmup; the bot uses a 30s timeout
+
+## Commands
+
+- `/start` — welcome and instructions
+- `/setlang <code>` — set your target language (en|he|es|ru|ar|fr|de)
+- `/status` — server OK?, your language, tracked members count
